@@ -1,0 +1,217 @@
+blueprint:
+  name: Scene Cycle Button
+  description: "Switch between multiple scenes on Philips Hue button clicks.
+    Supports long press, double press, and triple press actions as well."
+  domain: automation
+  author: Tim-Jonas Schwarz
+  input:
+    button:
+      name: Button
+      description: This button will be used to cycle through the scenes.
+      selector:
+        device:
+          entity:
+            - domain:
+                - sensor
+              device_class:
+                - battery
+              integration: hue
+            - domain:
+                - sensor
+              device_class:
+                - battery
+              integration: zha
+          filter:
+            - integration: hue
+              model: Hue Smart button (ROM001)
+              manufacturer: Signify Netherlands B.V.
+            - integration: hue
+              model: Hue Smart button (ROM001)
+              manufacturer: Philips
+            - integration: zha
+              model: ROM001
+              manufacturer: Signify Netherlands B.V.
+            - integration: zha
+              model: ROM001
+              manufacturer: Philips
+          multiple: false
+    target_light:
+      name: Lights
+      description: These lights will be controlled by the button.
+      selector:
+        entity:
+          domain: light
+          multiple: false
+    scenes:
+      name: Scenes input select
+      description: Define an input select with the scenes to cycle through on button press.
+      selector:
+        entity:
+          filter:
+            - domain: input_select
+    action_long_press:
+      name: Action on long button press
+      description: Define an action to perform when button is double-pressed.
+      default: Dim lights
+      selector:
+        select:
+          options:
+            - Dim lights
+            - Turn off all lights
+    action_double_press:
+      name: Action on double button press (optional)
+      description: Define an action to perform when button is double-pressed.
+      default: []
+      selector:
+        action:
+    action_triple_press:
+      name: Action on triple button press (optional)
+      description: Define an action to perform when button is triple-pressed.
+      default: []
+      selector:
+        action:
+    button_press_timeout:
+      name: Button press timeout
+      description: The time window in which a button press after a previous button one switches to the next scene.
+      selector:
+        duration:
+      default:
+        hours: 0
+        minutes: 0
+        seconds: 3
+trigger:
+  - device_id: !input button
+    domain: zha
+    platform: device
+    type: remote_button_short_release
+    subtype: turn_on
+    id: Single press
+  - device_id: !input button
+    domain: zha
+    platform: device
+    type: remote_button_long_press
+    subtype: turn_on
+    id: Continuously pressed
+  - device_id: !input button
+    domain: zha
+    platform: device
+    type: remote_button_double_press
+    subtype: turn_on
+    id: Double press
+  - device_id: !input button
+    domain: zha
+    platform: device
+    type: remote_button_triple_press
+    subtype: turn_on
+    id: Triple press
+condition: []
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - Single press
+        sequence:
+          - if:
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ (now().timestamp() - this.attributes.last_triggered.timestamp()) < button_press_timeout_seconds }}"
+                    enabled: true
+                    alias: Check if time since last triggered is < than predefined value
+                  - condition: template
+                    value_template: "{{ is_state( target_light , 'off' ) }}"
+                    alias: Check if target lights are off
+            then:
+              - if:
+                  - condition: template
+                    value_template: "{{ is_state( target_light , 'off' ) }}"
+                    alias: Check if target lights are off
+                then:
+                  - service: input_select.select_first
+                    target:
+                      entity_id: "{{ scenes }}"
+                else:
+                  - service: input_select.select_next
+                    target:
+                      entity_id: "{{ scenes }}"
+                    data:
+                      cycle: true
+              - service: scene.turn_on
+                target:
+                  entity_id: "{{ states(scenes) }}"
+                data:
+                  transition: 0.1
+            else:
+              - service: light.turn_off
+                metadata: {}
+                data: {}
+                target:
+                  entity_id: !input target_light
+      - conditions:
+          - condition: trigger
+            id:
+              - Continuously pressed
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_long_press == 'Turn off all lights' }}"
+                sequence:
+                  - service: light.turn_off
+                    entity_id: all
+                    alias: Turn off all lights
+                    data:
+                      transition: 0.1
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_long_press == 'Dim lights' }}"
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ brightness > 253 }}"
+                    then:
+                      - service: light.turn_off
+                        metadata: {}
+                        data:
+                          transition: 0
+                        target:
+                          entity_id: !input target_light
+                      - delay:
+                          hours: 0
+                          minutes: 0
+                          seconds: 0
+                          milliseconds: 100
+                      - service: light.turn_on
+                        metadata: {}
+                        data:
+                          transition: 0
+                        target:
+                          entity_id: !input target_light
+                    else:
+                      - service: light.turn_on
+                        data_template:
+                          entity_id: !input target_light
+                          transition: "0.7"
+                          brightness: "{% if not brightness == None
+                            %} {% set n = brightness + 25 %} {% if
+                            n > 255 %}\n  255\n{% else %}\n  {{ n }}\n{% endif %} {% else %}  25
+                            \ {% endif %}\n"
+      - conditions:
+          - condition: trigger
+            id:
+              - Double press
+        sequence: !input action_double_press
+      - conditions:
+          - condition: trigger
+            id:
+              - Triple press
+        sequence: !input action_triple_press
+mode: restart
+variables:
+  target_light: !input "target_light"
+  scenes: !input "scenes"
+  brightness: "{{state_attr(target_light, 'brightness')}}"
+  action_long_press: !input "action_long_press"
+  button_press_timeout: !input "button_press_timeout"
+  button_press_timeout_seconds: "{{ [button_press_timeout.hours * 3600, button_press_timeout.minutes * 60, button_press_timeout.seconds] | sum }}"
