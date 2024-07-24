@@ -126,12 +126,12 @@ action:
                     enabled: true
                     alias: Check if time since last triggered is < than predefined value
                   - condition: template
-                    value_template: "{{ is_state( target_light , 'off' ) }}"
+                    value_template: "{{ is_light_off }}"
                     alias: Check if target lights are off
             then:
               - if:
                   - condition: template
-                    value_template: "{{ is_state( target_light , 'off' ) }}"
+                    value_template: "{{ is_light_off }}"
                     alias: Check if target lights are off
                 then:
                   - service: input_select.select_first
@@ -221,4 +221,7 @@ variables:
   brightness: "{{state_attr(target_light, 'brightness')}}"
   action_long_press: !input "action_long_press"
   button_press_timeout: !input "button_press_timeout"
-  button_press_timeout_seconds: "{{ [button_press_timeout.hours * 3600, button_press_timeout.minutes * 60, button_press_timeout.seconds] | sum }}"
+  target_lights: "{{ area_entities(target_area) | select('match', '^light\\..+') | list }}"
+  target_lights_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list }}"
+  is_light_off: "{{ target_lights_on | count == 0 }}"
+  button_press_timeout_seconds: "{{ [button_press_timeout.hours * 3600, button_press_timeout.minutes * 60, button_press_timeout.seconds] | sum }}"
