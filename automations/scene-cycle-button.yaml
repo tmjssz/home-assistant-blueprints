@@ -38,13 +38,13 @@ blueprint:
           multiple: false
     target_area:
       name: Area
-      description: This area will be controlled by the button.
+      description: This area's lights will be controlled by the button.
       selector:
         area:
           multiple: false
     scene_state_counter_helper:
       name: Scene state counter helper
-      description: Define a counter helper which stores the number of clicks in a row.
+      description: Define a counter helper which stores the number of clicks in a row. This is needed to cycle through the scenes.
       selector:
         entity:
           filter:
@@ -68,7 +68,7 @@ blueprint:
         seconds: 3
     action_long_press:
       name: Action on long button press
-      description: Define an action to perform when button is double-pressed.
+      description: Define an action to perform when triggered by a long button press.
       default: Dim lights
       selector:
         select:
