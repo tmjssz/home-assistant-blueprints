@@ -36,13 +36,6 @@ blueprint:
               model: ROM001
               manufacturer: Philips
           multiple: false
-    target_light:
-      name: Lights
-      description: These lights will be controlled by the button.
-      selector:
-        entity:
-          domain: light
-          multiple: false
     target_area:
       name: Area
       description: This area will be controlled by the button.
@@ -147,7 +140,7 @@ action:
                     target:
                       entity_id: "{{ scenes_default[0] }}"
                     data:
-                      transition: 0.1
+                      transition: 0
                   - service: counter.set_value
                     target:
                       entity_id: "{{ scene_state_counter_helper }}"
@@ -158,7 +151,7 @@ action:
                     target:
                       entity_id: "{{ next_scene }}"
                     data:
-                      transition: 0.1
+                      transition: 0
                   - service: counter.increment
                     target:
                       entity_id: "{{ scene_state_counter_helper }}"
@@ -209,14 +202,25 @@ action:
                         target:
                           area_id: "{{ target_area }}"
                     else:
-                      - service: light.turn_on
-                        data_template:
-                          entity_id: !input target_light
-                          transition: "0.7"
-                          brightness: "{% if not brightness == None
-                            %} {% set n = brightness + 25 %} {% if
-                            n > 255 %}\n  255\n{% else %}\n  {{ n }}\n{% endif %} {% else %}  25
-                            \ {% endif %}\n"
+                      - repeat:
+                          for_each: "{{ target_lights }}"
+                          sequence:
+                            service: light.turn_on
+                            data_template:
+                              entity_id: "{{ repeat.item }}"
+                              transition: >-
+                                {% if states(repeat.item) == 'off' %}
+                                  0
+                                {% else %}
+                                  0.7
+                                {% endif %}
+                              brightness: >-
+                                {% set entity_brightness = state_attr(repeat.item, 'brightness') %}
+                                {% if not entity_brightness == None %}
+                                  {{ [entity_brightness + 25, 255] | min }}
+                                {% else %}
+                                  25
+                                {% endif %}
       - conditions:
           - condition: trigger
             id:
@@ -229,7 +233,6 @@ action:
         sequence: !input action_triple_press
 mode: restart
 variables:
-  target_light: !input "target_light"
   target_area: !input "target_area"
   scene_state_counter_helper: !input "scene_state_counter_helper"
   scenes_default: !input "scenes_default"
@@ -240,5 +243,5 @@ variables:
   target_lights: "{{ area_entities(target_area) | select('match', '^light\\..+') | list }}"
   target_lights_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list }}"
   is_light_off: "{{ target_lights_on | count == 0 }}"
-  brightness: "{{ state_attr(target_light, 'brightness') }}"
+  brightness: "{{ target_lights | map('state_attr', 'brightness') | reject('==', None) | list | average(0) | round | int }}"
   button_press_timeout_seconds: "{{ [button_press_timeout.hours * 3600, button_press_timeout.minutes * 60, button_press_timeout.seconds] | sum }}"
