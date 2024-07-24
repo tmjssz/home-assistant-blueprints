@@ -42,6 +42,12 @@ blueprint:
         entity:
           domain: light
           multiple: false
+    target_area:
+      name: Area
+      description: This area will be controlled by the button.
+      selector:
+        area:
+          multiple: false
     scenes:
       name: Scenes input select
       description: Define an input select with the scenes to cycle through on button press.
@@ -49,6 +55,15 @@ blueprint:
         entity:
           filter:
             - domain: input_select
+    button_press_timeout:
+      name: Button press timeout
+      description: The time window in which a button press after a previous button one switches to the next scene.
+      selector:
+        duration:
+      default:
+        hours: 0
+        minutes: 0
+        seconds: 3
     action_long_press:
       name: Action on long button press
       description: Define an action to perform when button is double-pressed.
@@ -70,15 +85,6 @@ blueprint:
       default: []
       selector:
         action:
-    button_press_timeout:
-      name: Button press timeout
-      description: The time window in which a button press after a previous button one switches to the next scene.
-      selector:
-        duration:
-      default:
-        hours: 0
-        minutes: 0
-        seconds: 3
 trigger:
   - device_id: !input button
     domain: zha
@@ -147,7 +153,7 @@ action:
                 metadata: {}
                 data: {}
                 target:
-                  entity_id: !input target_light
+                  area_id: "{{ target_area }}"
       - conditions:
           - condition: trigger
             id:
@@ -176,7 +182,7 @@ action:
                         data:
                           transition: 0
                         target:
-                          entity_id: !input target_light
+                          area_id: "{{ target_area }}"
                       - delay:
                           hours: 0
                           minutes: 0
@@ -187,7 +193,7 @@ action:
                         data:
                           transition: 0
                         target:
-                          entity_id: !input target_light
+                          area_id: "{{ target_area }}"
                     else:
                       - service: light.turn_on
                         data_template:
@@ -210,6 +216,7 @@ action:
 mode: restart
 variables:
   target_light: !input "target_light"
+  target_area: !input "target_area"
   scenes: !input "scenes"
   brightness: "{{state_attr(target_light, 'brightness')}}"
   action_long_press: !input "action_long_press"
