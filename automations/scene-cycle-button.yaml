@@ -66,6 +66,15 @@ blueprint:
         hours: 0
         minutes: 0
         seconds: 3
+    start_cycle_scene:
+      name: Start scene cycle with
+      description: Which scene to activate when area lights are off and the button is initially pressed.
+      default: First scene
+      selector:
+        select:
+          options:
+            - First scene
+            - Last active scene
     action_long_press:
       name: Action on long button press
       description: Define an action to perform when triggered by a long button press.
@@ -136,16 +145,28 @@ action:
                     value_template: "{{ is_light_off }}"
                     alias: Check if target lights are off
                 then:
-                  - service: scene.turn_on
-                    target:
-                      entity_id: "{{ scenes_default[0] }}"
-                    data:
-                      transition: 0
-                  - service: counter.set_value
-                    target:
-                      entity_id: "{{ scene_state_counter_helper }}"
-                    data:
-                      value: 1
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ start_cycle_scene == 'First scene' }}"
+                        sequence:
+                          - service: scene.turn_on
+                            target:
+                              entity_id: "{{ scenes_default[0] }}"
+                            data:
+                              transition: 0
+                          - service: counter.set_value
+                            target:
+                              entity_id: "{{ scene_state_counter_helper }}"
+                            data:
+                              value: 1
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ start_cycle_scene == 'Last active scene' }}"
+                        sequence:
+                          - service: light.turn_on
+                            target:
+                              area_id: "{{ target_area }}"
                 else:
                   - service: scene.turn_on
                     target:
@@ -232,6 +253,7 @@ variables:
   target_area: !input "target_area"
   scene_state_counter_helper: !input "scene_state_counter_helper"
   scenes_default: !input "scenes_default"
+  start_cycle_scene: !input "start_cycle_scene"
   action_long_press: !input "action_long_press"
   button_press_timeout: !input "button_press_timeout"
   scene_state_counter_value: "{{ states(scene_state_counter_helper) | int }}"
