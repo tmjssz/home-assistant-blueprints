@@ -157,8 +157,6 @@ action:
                       entity_id: "{{ scene_state_counter_helper }}"
             else:
               - service: light.turn_off
-                metadata: {}
-                data: {}
                 target:
                   area_id: "{{ target_area }}"
       - conditions:
@@ -185,7 +183,6 @@ action:
                         value_template: "{{ brightness > 253 }}"
                     then:
                       - service: light.turn_off
-                        metadata: {}
                         data:
                           transition: 0
                         target:
@@ -196,7 +193,6 @@ action:
                           seconds: 0
                           milliseconds: 100
                       - service: light.turn_on
-                        metadata: {}
                         data:
                           transition: 0
                         target:
