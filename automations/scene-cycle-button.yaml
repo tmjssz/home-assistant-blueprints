@@ -48,13 +48,21 @@ blueprint:
       selector:
         area:
           multiple: false
-    scenes:
-      name: Scenes input select
-      description: Define an input select with the scenes to cycle through on button press.
+    scene_state_counter_helper:
+      name: Scene state counter helper
+      description: Define a counter helper which stores the number of clicks in a row.
       selector:
         entity:
           filter:
-            - domain: input_select
+            - domain: counter
+    scenes_default:
+      name: Scenes
+      description: Define the scenes to cycle through on button press.
+      selector:
+        entity:
+          filter:
+            - domain: scene
+          multiple: true
     button_press_timeout:
       name: Button press timeout
       description: The time window in which a button press after a previous button one switches to the next scene.
@@ -134,20 +142,25 @@ action:
                     value_template: "{{ is_light_off }}"
                     alias: Check if target lights are off
                 then:
-                  - service: input_select.select_first
+                  - service: scene.turn_on
                     target:
-                      entity_id: "{{ scenes }}"
-                else:
-                  - service: input_select.select_next
-                    target:
-                      entity_id: "{{ scenes }}"
+                      entity_id: "{{ scenes_default[0] }}"
                     data:
-                      cycle: true
-              - service: scene.turn_on
-                target:
-                  entity_id: "{{ states(scenes) }}"
-                data:
-                  transition: 0.1
+                      transition: 0.1
+                  - service: counter.set_value
+                    target:
+                      entity_id: "{{ scene_state_counter_helper }}"
+                    data:
+                      value: 1
+                else:
+                  - service: scene.turn_on
+                    target:
+                      entity_id: "{{ next_scene }}"
+                    data:
+                      transition: 0.1
+                  - service: counter.increment
+                    target:
+                      entity_id: "{{ scene_state_counter_helper }}"
             else:
               - service: light.turn_off
                 metadata: {}
@@ -217,11 +230,14 @@ mode: restart
 variables:
   target_light: !input "target_light"
   target_area: !input "target_area"
-  scenes: !input "scenes"
-  brightness: "{{state_attr(target_light, 'brightness')}}"
+  scene_state_counter_helper: !input "scene_state_counter_helper"
+  scenes_default: !input "scenes_default"
   action_long_press: !input "action_long_press"
   button_press_timeout: !input "button_press_timeout"
+  scene_state_counter_value: "{{ states(scene_state_counter_helper) | int }}"
+  next_scene: "{{ scenes_default[scene_state_counter_value % scenes_default|length] }}"
   target_lights: "{{ area_entities(target_area) | select('match', '^light\\..+') | list }}"
   target_lights_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list }}"
   is_light_off: "{{ target_lights_on | count == 0 }}"
+  brightness: "{{ state_attr(target_light, 'brightness') }}"
   button_press_timeout_seconds: "{{ [button_press_timeout.hours * 3600, button_press_timeout.minutes * 60, button_press_timeout.seconds] | sum }}"
