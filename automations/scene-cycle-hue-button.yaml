@@ -1,0 +1,331 @@
+blueprint:
+  name: Scene Cycle Button (Philips Hue)
+  description: |
+    Switch between multiple scenes on Philips Hue Smart button clicks.
+
+    ℹ️ **Version**: 2024.10.0
+
+    🐈‍⬛ **GitHub**: https://github.com/tmjssz/home-assistant-blueprints
+
+    ## ✨ Features
+
+    - Cycles through multiple scenes on consecutive button presses
+    - Start the cycle with the first scene or the last active scene when the lights are off
+    - Dim the target lights or turn off all lights completely on long button press
+    - Custom action when button is double-pressed or triple-pressed
+
+    ## How to use
+
+    1. Select the **button device** that will be used to cycle through the scenes.
+    2. Choose the **area** that contains the lights you want to control with the button.
+    3. Define a **counter helper** to store the number of clicks in a row for the selected button.
+    4. Select the **scenes** you want to cycle through on button press.
+    5. Optionally update the default value for the **button press timeout**.
+    6. Choose whether to start the cycle with the **first scene** or the **last active scene** when the lights are off.
+    7. Define the **action on long button press**.
+    8. Optionally define a custom **action on double button press**.
+    9. Optionally define a custom **action on triple button press**.
+
+  domain: automation
+  author: Tim Schwarz
+
+  input:
+    button:
+      name: Button
+      description: This button will be used to cycle through the scenes. Only Philips Hue Smart buttons are supported.
+      selector:
+        device:
+          entity:
+            - domain:
+                - sensor
+              device_class:
+                - battery
+              integration: hue
+            - domain:
+                - sensor
+              device_class:
+                - battery
+              integration: zha
+          filter:
+            - integration: hue
+              model: Hue Smart button (ROM001)
+              manufacturer: Signify Netherlands B.V.
+            - integration: hue
+              model: Hue Smart button (ROM001)
+              manufacturer: Philips
+            - integration: zha
+              model: ROM001
+              manufacturer: Signify Netherlands B.V.
+            - integration: zha
+              model: ROM001
+              manufacturer: Philips
+          multiple: false
+    target_area:
+      name: Area
+      description: This area's lights will be controlled by the button.
+      selector:
+        area:
+          multiple: false
+    scene_state_counter_helper:
+      name: Scene state counter helper
+      description: Define a counter helper which stores the number of clicks in a row. This is needed to cycle through the scenes.
+      selector:
+        entity:
+          filter:
+            - domain: counter
+    scenes_default:
+      name: Scenes
+      description: Define the scenes to cycle through on button press.
+      selector:
+        entity:
+          filter:
+            - domain: scene
+          multiple: true
+    button_press_timeout:
+      name: Button press timeout
+      description: The time window in which a button press after a previous button one switches to the next scene. If the button is pressed after this time window, the cycle will start from the first scene again.
+      selector:
+        duration:
+      default:
+        hours: 0
+        minutes: 0
+        seconds: 3
+    start_cycle_scene:
+      name: Start scene cycle with
+      description: Which scene to activate when area lights are off and the button is initially pressed.
+      default: First scene
+      selector:
+        select:
+          options:
+            - First scene
+            - Last active scene
+    action_long_press:
+      name: Action on long button press
+      description: Define an action to perform when triggered by a long button press.
+      default: Dim lights
+      selector:
+        select:
+          options:
+            - Dim lights
+            - Turn off all lights
+    action_double_press:
+      name: Action on double button press (optional)
+      description: Define an action to perform when button is double-pressed.
+      default: []
+      selector:
+        action:
+    action_triple_press:
+      name: Action on triple button press (optional)
+      description: Define an action to perform when button is triple-pressed.
+      default: []
+      selector:
+        action:
+
+trigger:
+  - device_id: !input button
+    domain: zha
+    platform: device
+    type: remote_button_short_release
+    subtype: turn_on
+    id: Single press
+  - device_id: !input button
+    domain: zha
+    platform: device
+    type: remote_button_long_press
+    subtype: turn_on
+    id: Continuously pressed
+  - device_id: !input button
+    domain: zha
+    platform: device
+    type: remote_button_double_press
+    subtype: turn_on
+    id: Double press
+  - device_id: !input button
+    domain: zha
+    platform: device
+    type: remote_button_triple_press
+    subtype: turn_on
+    id: Triple press
+
+condition: []
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - Single press
+        sequence:
+          - if:
+              - condition: or
+                conditions:
+                  - condition: template
+                    value_template: "{{ (now().timestamp() - this.attributes.last_triggered.timestamp()) < button_press_timeout_seconds }}"
+                    enabled: true
+                    alias: Check if time since last triggered is < than predefined value
+                  - condition: template
+                    value_template: "{{ is_light_off }}"
+                    alias: Check if target lights are off
+            then:
+              - if:
+                  - condition: template
+                    value_template: "{{ is_light_off }}"
+                    alias: Check if target lights are off
+                then:
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ start_cycle_scene == 'First scene' }}"
+                        sequence:
+                          # Select the very first scene from the scenes list.
+                          - service: scene.turn_on
+                            target:
+                              entity_id: "{{ scenes_default[0] }}"
+                            data:
+                              transition: 0
+                          # Reset the counter to 1.
+                          - service: counter.set_value
+                            target:
+                              entity_id: "{{ scene_state_counter_helper }}"
+                            data:
+                              value: 1
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ start_cycle_scene == 'Last active scene' }}"
+                        sequence:
+                          # If the counter is 0 (which only happens when the automation runs the very first time with a
+                          # freh counter), we pick the first scene from the default scenes list. Otherwise, we pick the
+                          # last active scene.
+                          - service: scene.turn_on
+                            target:
+                              entity_id: >-
+                                {% if scene_state_counter_value == 0 %}
+                                  {{ scenes_default[0] }}
+                                {% else %}
+                                  {{ scenes_default[(scene_state_counter_value - 1) % scenes_default|length] }}
+                                {% endif %}
+                            data:
+                              transition: 0
+                          # Limit counter number to the number of scenes. This does not change the current scene state but
+                          # just avoids the counter to keep growing indefinitely.
+                          # We don't set the counter to 0, because the automation would pick up the first scene next time,
+                          # instead of the last active one.
+                          - service: counter.set_value
+                            target:
+                              entity_id: "{{ scene_state_counter_helper }}"
+                            data:
+                              value: >-
+                                {% set new_counter_value = scene_state_counter_value % scenes_default|length %}
+                                {% if new_counter_value != 0 %}
+                                  {{ new_counter_value }}
+                                {% else %}
+                                  {{ scene_state_counter_value }}
+                                {% endif %}
+                          - if:
+                              - condition: template
+                                value_template: "{{ scene_state_counter_value == 0 }}"
+                                alias: Check if scene counter is currently 0
+                            then:
+                              # If the counter is 0 (which only happens when the automation runs the very first time with
+                              # a freh counter), we set it to 1 to make sure, the first scene is "stored" as the last active
+                              # scene.
+                              - service: counter.increment
+                                target:
+                                  entity_id: "{{ scene_state_counter_helper }}"
+                else:
+                  - service: scene.turn_on
+                    target:
+                      entity_id: "{{ next_scene }}"
+                    data:
+                      transition: 0
+                  - service: counter.increment
+                    target:
+                      entity_id: "{{ scene_state_counter_helper }}"
+            else:
+              - service: light.turn_off
+                target:
+                  area_id: "{{ target_area }}"
+      - conditions:
+          - condition: trigger
+            id:
+              - Continuously pressed
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_long_press == 'Turn off all lights' }}"
+                sequence:
+                  - service: light.turn_off
+                    entity_id: all
+                    alias: Turn off all lights
+                    data:
+                      transition: 0.1
+              - conditions:
+                  - condition: template
+                    value_template: "{{ action_long_press == 'Dim lights' }}"
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ brightness > 253 }}"
+                    then:
+                      - service: light.turn_off
+                        data:
+                          transition: 0
+                        target:
+                          area_id: "{{ target_area }}"
+                      - delay:
+                          hours: 0
+                          minutes: 0
+                          seconds: 0
+                          milliseconds: 100
+                      - service: light.turn_on
+                        data:
+                          transition: 0
+                        target:
+                          area_id: "{{ target_area }}"
+                    else:
+                      - repeat:
+                          for_each: "{{ target_lights }}"
+                          sequence:
+                            service: light.turn_on
+                            data_template:
+                              entity_id: "{{ repeat.item }}"
+                              transition: >-
+                                {% if states(repeat.item) == 'off' %}
+                                  0
+                                {% else %}
+                                  0.7
+                                {% endif %}
+                              brightness: >-
+                                {% set entity_brightness = state_attr(repeat.item, 'brightness') %}
+                                {% if not entity_brightness == None %}
+                                  {{ [entity_brightness + 25, 255] | min }}
+                                {% else %}
+                                  25
+                                {% endif %}
+      - conditions:
+          - condition: trigger
+            id:
+              - Double press
+        sequence: !input action_double_press
+      - conditions:
+          - condition: trigger
+            id:
+              - Triple press
+        sequence: !input action_triple_press
+
+mode: restart
+variables:
+  target_area: !input "target_area"
+  scene_state_counter_helper: !input "scene_state_counter_helper"
+  scenes_default: !input "scenes_default"
+  start_cycle_scene: !input "start_cycle_scene"
+  action_long_press: !input "action_long_press"
+  button_press_timeout: !input "button_press_timeout"
+  scene_state_counter_value: "{{ states(scene_state_counter_helper) | int }}"
+  next_scene: "{{ scenes_default[scene_state_counter_value % scenes_default|length] }}"
+  target_lights: "{{ area_entities(target_area) | select('match', '^light\\..+') | list }}"
+  target_lights_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list }}"
+  is_light_off: "{{ target_lights_on | count == 0 }}"
+  brightness: "{{ target_lights | map('state_attr', 'brightness') | reject('==', None) | list | average(0) | round | int }}"
+  button_press_timeout_seconds: "{{ [button_press_timeout.hours * 3600, button_press_timeout.minutes * 60, button_press_timeout.seconds] | sum }}"
