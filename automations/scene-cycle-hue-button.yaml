@@ -1,14 +1,38 @@
 blueprint:
   name: Scene Cycle Button (Philips Hue)
-  description:
-    "Switch between multiple scenes on Philips Hue Smart button clicks.
-    Supports long press, double press, and triple press actions as well."
+  description: |
+    Switch between multiple scenes on Philips Hue Smart button clicks.
+
+    ℹ️ **Version**: 2024.10.0
+
+    🐈‍⬛ **GitHub**: https://github.com/tmjssz/home-assistant-blueprints
+
+    ## ✨ Features
+
+    - Cycles through multiple scenes on consecutive button presses
+    - Start the cycle with the first scene or the last active scene when the lights are off
+    - Dim the target lights or turn off all lights completely on long button press
+    - Custom action when button is double-pressed or triple-pressed
+
+    ## How to use
+
+    1. Select the **button device** that will be used to cycle through the scenes.
+    2. Choose the **area** that contains the lights you want to control with the button.
+    3. Define a **counter helper** to store the number of clicks in a row for the selected button.
+    4. Select the **scenes** you want to cycle through on button press.
+    5. Optionally update the default value for the **button press timeout**.
+    6. Choose whether to start the cycle with the **first scene** or the **last active scene** when the lights are off.
+    7. Define the **action on long button press**.
+    8. Optionally define a custom **action on double button press**.
+    9. Optionally define a custom **action on triple button press**.
+
   domain: automation
-  author: Tim-Jonas Schwarz
+  author: Tim Schwarz
+
   input:
     button:
       name: Button
-      description: This button will be used to cycle through the scenes.
+      description: This button will be used to cycle through the scenes. Only Philips Hue Smart buttons are supported.
       selector:
         device:
           entity:
@@ -59,7 +83,7 @@ blueprint:
           multiple: true
     button_press_timeout:
       name: Button press timeout
-      description: The time window in which a button press after a previous button one switches to the next scene.
+      description: The time window in which a button press after a previous button one switches to the next scene. If the button is pressed after this time window, the cycle will start from the first scene again.
       selector:
         duration:
       default:
@@ -96,6 +120,7 @@ blueprint:
       default: []
       selector:
         action:
+
 trigger:
   - device_id: !input button
     domain: zha
@@ -121,7 +146,9 @@ trigger:
     type: remote_button_triple_press
     subtype: turn_on
     id: Triple press
+
 condition: []
+
 action:
   - choose:
       - conditions:
@@ -286,6 +313,7 @@ action:
             id:
               - Triple press
         sequence: !input action_triple_press
+
 mode: restart
 variables:
   target_area: !input "target_area"
