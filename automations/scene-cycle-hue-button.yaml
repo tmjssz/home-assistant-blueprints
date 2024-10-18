@@ -1,5 +1,5 @@
 blueprint:
-  name: Scene Cycle Button
+  name: Scene Cycle Button (Philips Hue)
   description:
     "Switch between multiple scenes on Philips Hue Smart button clicks.
     Supports long press, double press, and triple press actions as well."
