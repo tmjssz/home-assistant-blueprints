@@ -1,0 +1,261 @@
+blueprint:
+  name: Time-based Trigger Sensor Scenes
+  description: |
+    Activate scenes via a trigger sensor (e.g. a motion sensor) depending on the time of the day and the current illuminance level.
+
+    ℹ️ **Version**: 2024.10.0
+
+    🐈‍⬛ **GitHub**: https://github.com/tmjssz/home-assistant-blueprints
+
+    ## ✨ Features
+
+    - Use a trigger sensor to activate scenes.
+    - Define scenes for day and night light modes.
+    - Activate scenes depending on the current illuminance level.
+    - Additional scene combinations for specific times of the day.
+
+    ## How to use
+
+    1. Define a trigger sensor that activates the scenes. This can be any binary sensor you prefer.
+    2. Select or create a timer helper that starts to run when the sensor is no longer triggered. When the timer ends, the controlled entities are switched off.
+    3. Define the scenes to activate during the day and night.
+    4. Define the illuminance sensor and a threshold. Only if the measured value of the sensor falls below the threshold, the lights are turned on during the day.
+    5. Optionally, create additional scene combinations for specific times of the day.
+
+  domain: automation
+  author: Tim-Jonas Schwarz
+
+  input:
+    trigger_sensor:
+      name: Trigger Sensor
+      description: The trigger sensor is responsible for turning on scenes. You can choose any [binary sensor](https://www.home-assistant.io/integrations/binary_sensor/) you prefer as trigger.
+      selector:
+        entity:
+          filter:
+            domain: binary_sensor
+    timer:
+      name: Timer
+      description: Select or create a [timer helper](https://www.home-assistant.io/integrations/timer/) that starts to run when the sensor is no longer triggered. When the timer ends, the controlled entities are switched off.
+      selector:
+        entity:
+          filter:
+            domain: timer
+    daylight_mode:
+      name: "Day Light Mode*"
+      icon: mdi:weather-sunny
+      collapsed: true
+      input:
+        daylight_scenes:
+          name: Day Light Scenes
+          description: Define the scenes to activate during the day when the sun is above the horizon.
+          selector:
+            entity:
+              filter:
+                - domain: scene
+              multiple: true
+        trigger_illuminance_sensor:
+          name: Illuminance Sensor
+          description: The sensor that measures the illuminace value during the day.
+          selector:
+            entity:
+              filter:
+                domain: sensor
+                device_class: illuminance
+        illuminance_threshold:
+          name: Illuminance Threshold
+          description: The illuminance threshold that is used as a condition to turn on lights during the day. Only if the measured value of the sensor defined above falls below a certain level, the lights are turned on during the day.
+          default: 7
+          selector:
+            number:
+              min: 0
+              max: 100
+    nightlight_mode:
+      name: "Night Light Mode*"
+      icon: mdi:weather-night
+      collapsed: true
+      input:
+        nightlight_scenes:
+          name: Night Light Scenes
+          description: Define the scenes to be activated during the night when the sun is below the horizon.
+          selector:
+            entity:
+              filter:
+                - domain: scene
+              multiple: true
+    override_mode_1:
+      name: "Extra Mode 1 (optional)"
+      icon: mdi:numeric-1-circle-outline
+      description: Here you can define another scene combination for a certain time of the day. It overrides the default day/night light modes during that time.
+      collapsed: false
+      input:
+        override_1_tod:
+          name: Time of the Day
+          description: |
+            Choose a [time of the day](https://www.home-assistant.io/integrations/tod/) when this mode should override the default day/night modes.
+            To create a new time of the day go to [helpers](/config/helpers).
+          default:
+          selector:
+            entity:
+              filter:
+                domain: binary_sensor
+                integration: tod
+        override_1_scenes:
+          name: Scenes
+          description: Define the scenes to activate during the time of the day defined above.
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: scene
+              multiple: true
+    override_mode_2:
+      name: "Extra Mode 2 (optional)"
+      icon: mdi:numeric-2-circle-outline
+      description: Here you can define another scene combination for a certain time of the day. It overrides the default day/night light modes during that time.
+      collapsed: false
+      input:
+        override_2_tod:
+          name: Time of the Day
+          description: |
+            Choose a [time of the day](https://www.home-assistant.io/integrations/tod/) when this mode should override the default day/night modes.
+            To create a new time of the day go to [helpers](/config/helpers).
+          default:
+          selector:
+            entity:
+              filter:
+                domain: binary_sensor
+                integration: tod
+        override_2_scenes:
+          name: Scenes
+          description: Define the scenes to activate during the time of the day defined above.
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: scene
+              multiple: true
+
+trigger:
+  - platform: state
+    entity_id: !input trigger_sensor
+    id: Trigger sensor turns ON
+    from: "off"
+    to: "on"
+  - platform: state
+    entity_id: !input trigger_sensor
+    id: Trigger sensor turns OFF
+    from: "on"
+    to: "off"
+  - platform: event
+    event_type: timer.finished
+    id: Timer finishes
+    event_data:
+      entity_id: !input timer
+
+condition: []
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - Trigger sensor turns OFF
+          - "{{ is_scenes_on }}"
+        sequence:
+          - service: timer.start
+            target:
+              entity_id: !input timer
+
+      - conditions:
+          - condition: trigger
+            id:
+              - Trigger sensor turns ON
+        sequence:
+          - if:
+              - condition: or
+                conditions:
+                  - condition: state
+                    entity_id: !input timer
+                    state: active
+                  - "{{ not is_scenes_on }}"
+            then:
+              - service: timer.cancel
+                target:
+                  entity_id: !input timer
+              - action: scene.turn_on
+                target:
+                  entity_id: "{{ target_scenes }}"
+              - action: scene.create
+                data:
+                  scene_id: active_scene
+                  snapshot_entities: "{{ target_scenes_entities }}"
+
+      - conditions:
+          - condition: trigger
+            id:
+              - Timer finishes
+        sequence:
+          - service: light.turn_off
+            target:
+              entity_id: "{{ active_scenes_entities }}"
+          - if: "{{ does_active_scene_exist }}"
+            then:
+              - action: scene.delete
+                metadata: {}
+                data: {}
+                target:
+                  entity_id: scene.active_scene
+
+mode: restart
+variables:
+  daylight_scenes: !input "daylight_scenes"
+  nightlight_scenes: !input "nightlight_scenes"
+  trigger_illuminance_sensor: !input "trigger_illuminance_sensor"
+  illuminance_threshold: !input "illuminance_threshold"
+  override_1_tod: !input "override_1_tod"
+  override_1_scenes: !input "override_1_scenes"
+  override_2_tod: !input "override_2_tod"
+  override_2_scenes: !input "override_2_scenes"
+
+  is_illuminance_below_threshold: "{{ states(trigger_illuminance_sensor) | int < illuminance_threshold }}"
+  is_override_mode_1_ative: >-
+    {% if override_1_tod %}
+      {{ is_state(override_1_tod, 'on') }}
+    {% else %}
+      {{ False }}
+    {% endif %}
+  is_override_mode_2_ative: >-
+    {% if override_2_tod != None %}
+      {{ is_state(override_2_tod, 'on') }}
+    {% else %}
+      {{ False }}
+    {% endif %}
+  is_daylight: "{{ state_attr('sun.sun', 'elevation') >= 0 }}"
+  target_scenes: >-
+    {% if is_override_mode_1_ative and override_1_scenes | length > 0%}
+      {{ override_1_scenes }}
+    {% elif is_override_mode_2_ative and override_2_scenes | length > 0 %}
+      {{ override_2_scenes }}
+    {% elif is_daylight %}
+      {% if is_illuminance_below_threshold %}
+        {{ daylight_scenes }}
+      {% else %}
+        {{ [] }}
+      {% endif %}
+    {% else %}
+      {{ nightlight_scenes }}
+    {% endif %}
+  target_scenes_entities: "{{ target_scenes | map('state_attr', 'entity_id') | list | sum(start=[]) }}"
+  does_active_scene_exist: "{{ states['scene.active_scene'] != None }}"
+  active_scenes_entities: >-
+    {% if does_active_scene_exist %}
+      {{ state_attr('scene.active_scene', 'entity_id') }}
+    {% else %}
+      {{ target_scenes_entities }}
+    {% endif %}
+  is_scenes_on: >-
+    {% if does_active_scene_exist %}
+      {{ active_scenes_entities | select('is_state', 'on') | list | length > 0 }}
+    {% else %}
+      {{ False }}
+    {% endif %}
