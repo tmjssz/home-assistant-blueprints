@@ -27,7 +27,7 @@ blueprint:
     9. Optionally define a custom **action on triple button press**.
 
   domain: automation
-  author: Tim Schwarz
+  author: Tim-Jonas Schwarz
 
   input:
     button:
