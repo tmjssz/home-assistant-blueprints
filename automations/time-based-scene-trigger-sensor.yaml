@@ -1,5 +1,5 @@
 blueprint:
-  name: Time-based Trigger Sensor Scenes
+  name: Time-based Scene Trigger Sensor
   description: |
     Activate scenes via a trigger sensor (e.g. a motion sensor) depending on the time of the day and the current illuminance level.
 
