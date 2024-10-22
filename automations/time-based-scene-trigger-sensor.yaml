@@ -3,7 +3,7 @@ blueprint:
   description: |
     Activate scenes via a trigger sensor (e.g. a motion sensor) depending on the time of the day and the current illuminance level.
 
-    ℹ️ **Version**: 2024.10.0
+    ℹ️ **Version**: 2024.10.1
 
     🐈‍⬛ **GitHub**: https://github.com/tmjssz/home-assistant-blueprints
 
