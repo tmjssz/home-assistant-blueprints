@@ -160,6 +160,11 @@ trigger:
     id: Timer finishes
     event_data:
       entity_id: !input timer
+  - platform: state
+    id: Is being disabled
+    entity_id: !input "is_disabled_input_boolean"
+    from: "off"
+    to: "on"
 
 condition: []
 
@@ -222,6 +227,15 @@ action:
                 data: {}
                 target:
                   entity_id: scene.active_scene
+
+      - conditions:
+          - condition: trigger
+            id:
+              - Is being disabled
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input timer
 
 mode: restart
 variables:
