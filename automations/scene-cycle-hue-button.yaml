@@ -12,7 +12,7 @@ blueprint:
     - Cycles through multiple scenes on consecutive button presses
     - Start the cycle with the first scene or the last active scene when the lights are off
     - Dim the target lights or turn off all lights completely on long button press
-    - Custom action when button is double-pressed or triple-pressed
+    - Custom actions
 
     ## How to use
 
@@ -23,8 +23,7 @@ blueprint:
     5. Optionally update the default value for the **button press timeout**.
     6. Choose whether to start the cycle with the **first scene** or the **last active scene** when the lights are off.
     7. Define the **action on long button press**.
-    8. Optionally define a custom **action on double button press**.
-    9. Optionally define a custom **action on triple button press**.
+    8. Optionally define a custom actions on **single**, **double** or **triple button press**.
 
   domain: automation
   author: Tim-Jonas Schwarz
