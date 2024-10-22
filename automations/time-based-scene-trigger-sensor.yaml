@@ -3,7 +3,7 @@ blueprint:
   description: |
     Activate scenes via a trigger sensor (e.g. a motion sensor) depending on the time of the day and the current illuminance level.
 
-    ℹ️ **Version**: 2024.10.0
+    ℹ️ **Version**: 2024.10.1
 
     🐈‍⬛ **GitHub**: https://github.com/tmjssz/home-assistant-blueprints
 
@@ -17,10 +17,11 @@ blueprint:
     ## How to use
 
     1. Define a trigger sensor that activates the scenes. This can be any binary sensor you prefer.
-    2. Select or create a timer helper that starts to run when the sensor is no longer triggered. When the timer ends, the controlled entities are switched off.
-    3. Define the scenes to activate during the day and night.
-    4. Define the illuminance sensor and a threshold. Only if the measured value of the sensor falls below the threshold, the lights are turned on during the day.
-    5. Optionally, create additional scene combinations for specific times of the day.
+    2. Define a timer helper that starts to run when the sensor is no longer triggered. When the timer ends, the controlled entities are switched off.
+    3. Define an input boolean that controls whether the automation is active. Only if this boolean helper is **OFF** the automation will react to triggers.
+    4. Define the scenes to activate during the day and night.
+    5. Define the illuminance sensor and a threshold. Only if the measured value of the sensor falls below the threshold, the lights are turned on during the day.
+    6. Optionally, create additional scene combinations for specific times of the day.
 
   domain: automation
   author: Tim-Jonas Schwarz
@@ -40,6 +41,15 @@ blueprint:
         entity:
           filter:
             domain: timer
+    is_disabled_input_boolean:
+      name: Is Disabled Input Boolean
+      description: >-
+        Select or create an [input boolean](https://www.home-assistant.io/integrations/input_boolean/) that controls whether the automation is active. Only if this boolean helper is **OFF** the automation will react to triggers.
+        For example, it may be useful to set this helper **ON** when the lights are being manually switched on via a switch until they are switched off again.
+      selector:
+        entity:
+          filter:
+            domain: input_boolean
     daylight_mode:
       name: "Day Light Mode*"
       icon: mdi:weather-sunny
@@ -151,6 +161,11 @@ trigger:
     id: Timer finishes
     event_data:
       entity_id: !input timer
+  - platform: state
+    id: Is being disabled
+    entity_id: !input "is_disabled_input_boolean"
+    from: "off"
+    to: "on"
 
 condition: []
 
@@ -161,6 +176,7 @@ action:
             id:
               - Trigger sensor turns OFF
           - "{{ is_scenes_on }}"
+          - "{{ is_enabled }}"
         sequence:
           - service: timer.start
             target:
@@ -171,29 +187,36 @@ action:
             id:
               - Trigger sensor turns ON
         sequence:
-          - if:
-              - condition: or
-                conditions:
+          - if: "{{ is_scenes_on }}"
+            then:
+              - if:
                   - condition: state
                     entity_id: !input timer
                     state: active
-                  - "{{ not is_scenes_on }}"
-            then:
-              - service: timer.cancel
-                target:
-                  entity_id: !input timer
-              - action: scene.turn_on
-                target:
-                  entity_id: "{{ target_scenes }}"
-              - action: scene.create
-                data:
-                  scene_id: active_scene
-                  snapshot_entities: "{{ target_scenes_entities }}"
+                then:
+                  - service: timer.cancel
+                    target:
+                      entity_id: !input timer
+            else:
+              - if:
+                  - condition: and
+                    conditions:
+                      - "{{ is_enabled }}"
+                      - "{{ target_scenes_entities | length > 0 }}"
+                then:
+                  - action: scene.turn_on
+                    target:
+                      entity_id: "{{ target_scenes }}"
+                  - action: scene.create
+                    data:
+                      scene_id: active_scene
+                      snapshot_entities: "{{ target_scenes_entities }}"
 
       - conditions:
           - condition: trigger
             id:
               - Timer finishes
+          - "{{ is_enabled }}"
         sequence:
           - service: light.turn_off
             target:
@@ -206,8 +229,18 @@ action:
                 target:
                   entity_id: scene.active_scene
 
+      - conditions:
+          - condition: trigger
+            id:
+              - Is being disabled
+        sequence:
+          - service: timer.cancel
+            target:
+              entity_id: !input timer
+
 mode: restart
 variables:
+  is_disabled_input_boolean: !input "is_disabled_input_boolean"
   daylight_scenes: !input "daylight_scenes"
   nightlight_scenes: !input "nightlight_scenes"
   trigger_illuminance_sensor: !input "trigger_illuminance_sensor"
@@ -217,6 +250,12 @@ variables:
   override_2_tod: !input "override_2_tod"
   override_2_scenes: !input "override_2_scenes"
 
+  is_enabled: >-
+    {% if is_disabled_input_boolean %}
+      {{ is_state(is_disabled_input_boolean, 'off') }}
+    {% else %}
+      {{ True }}
+    {% endif %}
   is_illuminance_below_threshold: "{{ states(trigger_illuminance_sensor) | int < illuminance_threshold }}"
   is_override_mode_1_ative: >-
     {% if override_1_tod %}
@@ -232,7 +271,7 @@ variables:
     {% endif %}
   is_daylight: "{{ state_attr('sun.sun', 'elevation') >= 0 }}"
   target_scenes: >-
-    {% if is_override_mode_1_ative and override_1_scenes | length > 0%}
+    {% if is_override_mode_1_ative and override_1_scenes | length > 0 %}
       {{ override_1_scenes }}
     {% elif is_override_mode_2_ative and override_2_scenes | length > 0 %}
       {{ override_2_scenes }}
@@ -253,9 +292,4 @@ variables:
     {% else %}
       {{ target_scenes_entities }}
     {% endif %}
-  is_scenes_on: >-
-    {% if does_active_scene_exist %}
-      {{ active_scenes_entities | select('is_state', 'on') | list | length > 0 }}
-    {% else %}
-      {{ False }}
-    {% endif %}
+  is_scenes_on: "{{ active_scenes_entities | select('is_state', 'on') | list | length > 0 }}"
