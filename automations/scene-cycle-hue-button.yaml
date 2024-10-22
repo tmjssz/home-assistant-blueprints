@@ -99,6 +99,29 @@ blueprint:
           options:
             - First scene
             - Last active scene
+    additional_actions:
+      name: "Additional actions for single button press (optional)"
+      icon: mdi:puzzle
+      collapsed: true
+      input:
+        action_turn_on:
+          name: Action when lights are turned ON (optional)
+          description: Define an additional action to perform when triggered by a single button press to turn on a scene.
+          default: []
+          selector:
+            action:
+        action_cycle:
+          name: Action when switching to the next scene (optional)
+          description: Define an additional action to perform when triggered by a single button press following a previous one to switch to the next scene.
+          default: []
+          selector:
+            action:
+        action_turn_off:
+          name: Action when lights are turned OFF (optional)
+          description: Define an additional action to perform when triggered by a single button press to turn off the lights.
+          default: []
+          selector:
+            action:
     action_long_press:
       name: Action on long button press
       description: Define an action to perform when triggered by a long button press.
@@ -232,6 +255,7 @@ action:
                               - service: counter.increment
                                 target:
                                   entity_id: "{{ scene_state_counter_helper }}"
+                  - sequence: !input action_turn_on
                 else:
                   - service: scene.turn_on
                     target:
@@ -241,10 +265,12 @@ action:
                   - service: counter.increment
                     target:
                       entity_id: "{{ scene_state_counter_helper }}"
+                  - sequence: !input action_cycle
             else:
               - service: light.turn_off
                 target:
                   area_id: "{{ target_area }}"
+              - sequence: !input action_turn_off
       - conditions:
           - condition: trigger
             id:
@@ -322,6 +348,7 @@ variables:
   start_cycle_scene: !input "start_cycle_scene"
   action_long_press: !input "action_long_press"
   button_press_timeout: !input "button_press_timeout"
+
   scene_state_counter_value: "{{ states(scene_state_counter_helper) | int }}"
   next_scene: "{{ scenes_default[scene_state_counter_value % scenes_default|length] }}"
   target_lights: "{{ area_entities(target_area) | select('match', '^light\\..+') | list }}"
