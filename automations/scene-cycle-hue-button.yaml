@@ -3,7 +3,7 @@ blueprint:
   description: |
     Switch between multiple scenes on Philips Hue Smart button clicks.
 
-    ℹ️ **Version**: 2024.10.1
+    ℹ️ **Version**: 2025.01.1
 
     🐈‍⬛ **GitHub**: https://github.com/tmjssz/home-assistant-blueprints
 
