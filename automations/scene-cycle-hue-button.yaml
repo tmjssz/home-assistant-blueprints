@@ -11,6 +11,7 @@ blueprint:
 
     - Cycles through multiple scenes on consecutive button presses
     - Start the cycle with the first scene or the last active scene when the lights are off
+    - Start cycle with the last active scene and reset to the first one on the next button press
     - Dim the target lights or turn off all lights completely on long button press
     - Custom actions
 
@@ -91,13 +92,22 @@ blueprint:
         seconds: 3
     start_cycle_scene:
       name: Start scene cycle with
-      description: Which scene to activate when area lights are off and the button is initially pressed.
-      default: First scene
+      description: |
+        Which scene to activate when area lights are off and the button is initially pressed.
+
+        - **First scene**: Always start the cycle with the first scene.
+        - **Last active scene**: Start the cycle with the last active scene and continue with the next scene.
+        - **Last active scene + then first scene**: Start the cycle with the last active scene. If the button is pressed again, the cycle will start over with the first scene.
+      default: first
       selector:
         select:
           options:
-            - First scene
-            - Last active scene
+            - label: First scene
+              value: first
+            - label: Last active scene
+              value: last_active
+            - label: Last active scene + then first scene
+              value: last_active_then_first
     additional_actions:
       name: "Additional actions for single button press (optional)"
       icon: mdi:puzzle
@@ -197,12 +207,12 @@ action:
                   - choose:
                       - conditions:
                           - condition: template
-                            value_template: "{{ start_cycle_scene == 'First scene' }}"
+                            value_template: "{{ start_cycle_scene == 'first' }}"
                         sequence:
                           # Select the very first scene from the scenes list.
                           - service: scene.turn_on
                             target:
-                              entity_id: "{{ scenes_default[0] }}"
+                              entity_id: "{{ first_scene }}"
                             data:
                               transition: 0
                           # Reset the counter to 1.
@@ -212,48 +222,38 @@ action:
                             data:
                               value: 1
                       - conditions:
-                          - condition: template
-                            value_template: "{{ start_cycle_scene == 'Last active scene' }}"
+                          - condition: or
+                            conditions:
+                              - condition: template
+                                value_template: "{{ start_cycle_scene == 'last_active' }}"
+                              - condition: template
+                                value_template: "{{ start_cycle_scene == 'last_active_then_first' }}"
                         sequence:
-                          # If the counter is 0 (which only happens when the automation runs the very first time with a
-                          # freh counter), we pick the first scene from the default scenes list. Otherwise, we pick the
-                          # last active scene.
                           - service: scene.turn_on
                             target:
-                              entity_id: >-
-                                {% if scene_state_counter_value == 0 %}
-                                  {{ scenes_default[0] }}
-                                {% else %}
-                                  {{ scenes_default[(scene_state_counter_value - 1) % scenes_default|length] }}
-                                {% endif %}
+                              entity_id: "{{ last_active_scene }}"
                             data:
                               transition: 0
                           # Limit counter number to the number of scenes. This does not change the current scene state but
                           # just avoids the counter to keep growing indefinitely.
                           # We don't set the counter to 0, because the automation would pick up the first scene next time,
                           # instead of the last active one.
+                          # If the counter is currently 0 (which only happens when the automation runs the very first time
+                          # with a freh counter), we set it to 1 to make sure, the first scene is "stored" as the last active.
                           - service: counter.set_value
                             target:
                               entity_id: "{{ scene_state_counter_helper }}"
                             data:
                               value: >-
-                                {% set new_counter_value = scene_state_counter_value % scenes_default|length %}
-                                {% if new_counter_value != 0 %}
-                                  {{ new_counter_value }}
+                                {% if start_cycle_scene == 'last_active' and next_scene_index > 0 %}
+                                  {{ next_scene_index }}
+                                {% elif start_cycle_scene == 'last_active_then_first' and next_scene_index == 1 %}
+                                  {{ next_scene_index }}
+                                {% elif scene_state_counter_value > 0 %}
+                                  {{ scenes_default|length }}
                                 {% else %}
-                                  {{ scene_state_counter_value }}
+                                  {{ 1 }}
                                 {% endif %}
-                          - if:
-                              - condition: template
-                                value_template: "{{ scene_state_counter_value == 0 }}"
-                                alias: Check if scene counter is currently 0
-                            then:
-                              # If the counter is 0 (which only happens when the automation runs the very first time with
-                              # a freh counter), we set it to 1 to make sure, the first scene is "stored" as the last active
-                              # scene.
-                              - service: counter.increment
-                                target:
-                                  entity_id: "{{ scene_state_counter_helper }}"
                   - sequence: !input action_turn_on
                 else:
                   - service: scene.turn_on
@@ -349,7 +349,20 @@ variables:
   button_press_timeout: !input "button_press_timeout"
 
   scene_state_counter_value: "{{ states(scene_state_counter_helper) | int }}"
-  next_scene: "{{ scenes_default[scene_state_counter_value % scenes_default|length] }}"
+  first_scene: "{{ scenes_default[0] }}"
+
+  # If the counter is 0 (which only happens when the automation runs the very first time with a
+  # freh counter), we pick the first scene from the default scenes list. Otherwise, we pick the
+  # last active scene.
+  last_active_scene: |
+    {% if scene_state_counter_value == 0 %}
+      {{ first_scene }}
+    {% else %}
+      {{ scenes_default[(scene_state_counter_value - 1) % scenes_default|length] }}
+    {% endif %}
+
+  next_scene_index: "{{ scene_state_counter_value % scenes_default|length }}"
+  next_scene: "{{ scenes_default[next_scene_index] }}"
   target_lights: "{{ area_entities(target_area) | select('match', '^light\\..+') | list }}"
   target_lights_on: "{{ expand(target_lights) | selectattr('state', 'eq', 'on') | list }}"
   is_light_off: "{{ target_lights_on | count == 0 }}"
