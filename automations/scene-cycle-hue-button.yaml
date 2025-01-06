@@ -134,12 +134,14 @@ blueprint:
     action_long_press:
       name: Action on long button press
       description: Define an action to perform when triggered by a long button press.
-      default: Dim lights
+      default: dim
       selector:
         select:
           options:
-            - Dim lights
-            - Turn off all lights
+            - label: Dim lights
+              value: dim
+            - label: Turn off all lights
+              value: turn_off_all_lights
     action_double_press:
       name: Action on double button press (optional)
       description: Define an action to perform when button is double-pressed.
@@ -278,7 +280,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ action_long_press == 'Turn off all lights' }}"
+                    value_template: "{{ action_long_press == 'turn_off_all_lights' }}"
                 sequence:
                   - service: light.turn_off
                     entity_id: all
@@ -287,7 +289,7 @@ action:
                       transition: 0.1
               - conditions:
                   - condition: template
-                    value_template: "{{ action_long_press == 'Dim lights' }}"
+                    value_template: "{{ action_long_press == 'dim' }}"
                 sequence:
                   - if:
                       - condition: template
