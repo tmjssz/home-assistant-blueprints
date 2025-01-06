@@ -270,13 +270,15 @@ variables:
       {{ False }}
     {% endif %}
   is_daylight: "{{ state_attr('sun.sun', 'elevation') >= 0 }}"
+  daylight_scenes_entities: "{{ daylight_scenes | map('state_attr', 'entity_id') | list | sum(start=[]) }}"
+  is_daylight_scenes_on: "{{ daylight_scenes_entities | select('is_state', 'on') | list | length > 0 }}"
   target_scenes: >-
     {% if is_override_mode_1_ative and override_1_scenes | length > 0 %}
       {{ override_1_scenes }}
     {% elif is_override_mode_2_ative and override_2_scenes | length > 0 %}
       {{ override_2_scenes }}
     {% elif is_daylight %}
-      {% if is_illuminance_below_threshold %}
+      {% if is_illuminance_below_threshold or is_daylight_scenes_on %}
         {{ daylight_scenes }}
       {% else %}
         {{ [] }}
